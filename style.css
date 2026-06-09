@@ -1,0 +1,64 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0a0812;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: "MS Gothic", "ＭＳ ゴシック", monospace;
+  overflow: hidden;
+}
+
+#frame {
+  position: relative;
+  width: min(96vw, calc(96vh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  background: #000;
+  box-shadow: 0 0 60px rgba(120, 60, 200, 0.25), 0 0 14px rgba(0, 0, 0, 0.9);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+#game {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* ブラウン管風スキャンライン */
+#scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.18) 3px,
+    rgba(0, 0, 0, 0) 4px
+  );
+  mix-blend-mode: multiply;
+}
+
+/* 周辺減光 */
+#vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 58%, rgba(0, 0, 0, 0.42) 100%);
+}
+
+#help {
+  margin-top: 10px;
+  color: #8a8098;
+  font-size: 12px;
+  display: flex;
+  gap: 24px;
+}
+
+.p1key { color: #ffb84d; }
+.p2key { color: #b08aff; }

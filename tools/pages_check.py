@@ -22,4 +22,4 @@ with sync_playwright() as p:
 print(f"ロスター: {n}体 / PeerJS: {peer} / state: {state} / エラー: {len(errors)}")
 for e in errors:
     print("  ERROR:", e)
-sys.exit(0 if (n == 4 and peer and not errors) else 1)
+sys.exit(0 if (n >= 6 and peer and not errors) else 1)

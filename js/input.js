@@ -29,11 +29,22 @@ const Input = (() => {
     };
   }
 
+  // タッチ操作などからの仮想キー入力（KeyCode単位でキーボードと同等に扱う）
+  function setVirtual(code, isDown) {
+    if (isDown) {
+      if (!down[code]) pressedNow[code] = true;
+      down[code] = true;
+    } else {
+      down[code] = false;
+    }
+  }
+
   return {
     p1: () => pad(P1_KEYS),
     p2: () => pad(P2_KEYS),
     held: (code) => !!down[code],
     pressed: (code) => !!pressedNow[code],
+    setVirtual,
     endFrame: () => { for (const k of Object.keys(pressedNow)) delete pressedNow[k]; },
     emptyPad: () => ({ left: false, right: false, jump: false, guard: false, lightPressed: false, heavyPressed: false, specialPressed: false }),
   };

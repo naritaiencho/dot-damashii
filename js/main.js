@@ -5,7 +5,7 @@
   ctx.imageSmoothingEnabled = false;
 
   // ロスター構築（読み込み順を固定）
-  const ROSTER_ORDER = ["jiro", "yoko", "gashan", "matatabi"];
+  const ROSTER_ORDER = ["jiro", "yoko", "gashan", "matatabi", "raiden", "shinobu"];
   const ALL = window.DOT_FIGHTERS || [];
   const ROSTER = ROSTER_ORDER.map((id) => ALL.find((c) => c.id === id)).filter(Boolean);
   ALL.forEach((c) => { if (!ROSTER.includes(c)) ROSTER.push(c); });
@@ -19,6 +19,7 @@
   let resultWinner = null;
   let rosterSprites = null;
   let titleToast = null; // {msg, t}
+  let streak = 0; // VS COM 勝ち抜き数
 
   // ===== ネット対戦用 =====
   let netUI = null;      // {menuIdx, code, joinInput, msg, connecting, status}
@@ -84,6 +85,7 @@
     state = "title";
     t = 0;
     menuIndex = 0;
+    streak = 0;
     if (audioReady) AudioSys.playBgm("title");
   }
 
@@ -426,6 +428,7 @@
           battle.update();
           if (battle.finished) {
             resultWinner = battle.winner || battle.f1;
+            if (sel.mode === "cpu" && battle.winner === battle.f1) streak++;
             AudioSys.sfx("win");
             enterResult();
           }
@@ -468,7 +471,14 @@
         } else {
           if (Input.pressed("Enter") || Input.pressed("KeyJ")) {
             AudioSys.sfx("start");
-            enterSelect(sel.mode);
+            if (sel.mode === "cpu" && battle && battle.winner === battle.f1) {
+              // 勝ち抜き継続: 次の対戦相手がランダム登場
+              sel.p2 = (Math.random() * ROSTER.length) | 0;
+              enterVs();
+            } else {
+              streak = 0;
+              enterSelect(sel.mode);
+            }
           }
           if (Input.pressed("Escape")) enterTitle();
         }
@@ -516,12 +526,22 @@
         if (sel.mode === "net" && netLock) {
           UI.drawNetOverlay(ctx, t, Net.rtt, netLock.stall, netLock.desync);
         }
+        if (sel.mode === "cpu" && streak > 0) {
+          UI.T(ctx, `${streak}人抜き中！`, 320, 48, 11, "#ffe066", "center");
+        }
         break;
       case "result":
         UI.drawResult(ctx, t, resultWinner.def, resultWinner.sprites, currentStage.canvas);
         if (sel.mode === "net") {
           if (netRematch.me && !netRematch.them) UI.T(ctx, "あいての へんじを まっています…", 320, 318, 13, "#bfeaff", "center");
           else if (!netRematch.me && netRematch.them) UI.T(ctx, "あいてが さいせんを きぼうしています！", 320, 318, 13, "#ffe066", "center");
+        } else if (sel.mode === "cpu") {
+          if (battle && battle.winner === battle.f1) {
+            UI.T(ctx, `🔥 ${streak}人抜き！`, 320, 8, 20, t % 20 < 10 ? "#ffe066" : "#ff7a2e", "center");
+            UI.T(ctx, "ENTER: つぎの あいてが とうじょう！", 320, 314, 13, "#7aff7a", "center");
+          } else if (streak > 0) {
+            UI.T(ctx, `${streak}人抜きで 力尽きた…`, 320, 8, 18, "#ff6a5a", "center");
+          }
         }
         break;
     }

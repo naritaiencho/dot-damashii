@@ -198,7 +198,8 @@ const UI = (() => {
     T(ctx, "ファイター セレクト", 320, 22, 28, "#ffd64a", "center");
 
     const n = roster.length;
-    const cellW = 100, gap = 24;
+    const gap = n > 4 ? 12 : 24;
+    const cellW = Math.min(100, Math.floor((620 - (n - 1) * gap) / n));
     const totalW = n * cellW + (n - 1) * gap;
     const startX = 320 - totalW / 2;
 
@@ -219,7 +220,8 @@ const UI = (() => {
       if (spr) {
         const img = spr.frames.idle[Math.floor(t / 22) % 2].r;
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(img, x + 2, y + 2, 96, 96);
+        const sz = cellW - 8;
+        ctx.drawImage(img, x + 4, y + 4, sz, sz);
       }
 
       // カーソル
@@ -236,7 +238,7 @@ const UI = (() => {
         T(ctx, sel.mode === "cpu" ? "COM" : "2P", x + cellW - 4, y + 4, 14, "#b06aff", "right");
       }
 
-      T(ctx, c.name, x + cellW / 2, y + cellW + 10, 13, isP1 || isP2 ? "#ffffff" : "#9a90a8", "center");
+      T(ctx, c.name, x + cellW / 2, y + cellW + 10, n > 4 ? 10 : 13, isP1 || isP2 ? "#ffffff" : "#9a90a8", "center");
 
       // ネット対戦時の決定済みバッジ
       if (sel.netMode) {

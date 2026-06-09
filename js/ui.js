@@ -173,16 +173,16 @@ const UI = (() => {
     T(ctx, "〜 昭和激闘伝 〜", 320, 150 + bounce, 22, "#f8f0e0", "center");
 
     // メニュー
-    const items = ["ひとりであそぶ (VS COM)", "ふたりであそぶ (VS 2P)"];
+    const items = ["ひとりであそぶ (VS COM)", "ふたりであそぶ (VS 2P)", "ネットたいせん (ONLINE)"];
     items.forEach((item, i) => {
       const sel = i === menuIndex;
-      const y = 218 + i * 34;
+      const y = 202 + i * 32;
       if (sel) {
         ctx.fillStyle = "rgba(255,214,74,0.16)";
-        ctx.fillRect(160, y - 4, 320, 28);
+        ctx.fillRect(160, y - 4, 320, 27);
         T(ctx, "▶", 178, y, 18, t % 30 < 15 ? "#ffd64a" : "#ff4a2e", "left");
       }
-      T(ctx, item, 320, y, 18, sel ? "#ffe066" : "#9a90a8", "center");
+      T(ctx, item, 320, y, 18, sel ? "#ffe066" : i === 2 ? "#7ac8e8" : "#9a90a8", "center");
     });
 
     if (t % 60 < 38) T(ctx, "- W/S で選択  ENTER で決定 -", 320, 300, 13, "#f8f0e0", "center");

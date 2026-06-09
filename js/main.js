@@ -25,6 +25,10 @@
   let netLock = null;    // ロックステップ状態
   let netRematch = null; // {me, them}
   let netEvents = [];
+  // バトル開始ハンドシェイク（入力バッファ初期化の競合防止）
+  // 相手の ready(同エポック) を受け取るまで入力送信を開始しない
+  let netEpoch = 0;
+  let remoteReadyEpoch = -1;
   const NET_DELAY = 4;
   const EDGE_MASK = 4 | 16 | 32 | 64; // jump/light/heavy/special
 
@@ -110,6 +114,8 @@
     if (sel.mode === "net") {
       netLock = { frame: 0, delay: NET_DELAY, local: {}, pending: 0, stall: 0, hashes: {}, remoteH: {}, desync: false };
       Net.clearInputs();
+      netEpoch++;
+      Net.send({ t: "ready", e: netEpoch });
     }
     if (audioReady) AudioSys.playBgm("battle");
   }
@@ -127,6 +133,8 @@
     state = "netmenu";
     t = 0;
     netEvents = [];
+    netEpoch = 0;
+    remoteReadyEpoch = -1;
     netUI = { menuIdx: 0, code: null, joinInput: "", msg: null, connecting: false, status: null };
   }
 
@@ -332,7 +340,10 @@
         if (sel.mode === "net") {
           for (const [e, d] of drainNetEvents()) {
             if (e === "closed" || e === "error") { handleNetDrop(); break; }
-            if (e === "data" && d.t === "bye") { handleNetDrop("あいてが たいせんを やめました"); break; }
+            if (e === "data") {
+              if (d.t === "bye") { handleNetDrop("あいてが たいせんを やめました"); break; }
+              if (d.t === "ready") remoteReadyEpoch = Math.max(remoteReadyEpoch, d.e);
+            }
           }
           if (state !== "vs") break;
           if (t >= 150) enterBattle();
@@ -347,6 +358,7 @@
             if (e === "closed" || e === "error") { handleNetDrop(); break; }
             if (e === "data") {
               if (d.t === "bye") { handleNetDrop("あいてが たいせんを やめました"); break; }
+              if (d.t === "ready") remoteReadyEpoch = Math.max(remoteReadyEpoch, d.e);
               if (d.t === "h") {
                 if (netLock.hashes[d.f] != null) {
                   if (netLock.hashes[d.f] !== d.h) netLock.desync = true;
@@ -365,6 +377,12 @@
             break;
           }
           // ===== ロックステップ =====
+          // 相手がバトル画面に入る（=入力バッファ初期化を終える）まで入力送信を保留
+          if (remoteReadyEpoch < netEpoch) {
+            netLock.pending |= encodePad(Input.p1()) & EDGE_MASK;
+            netLock.stall++;
+            break;
+          }
           const sampleF = netLock.frame + netLock.delay;
           if (!(sampleF in netLock.local)) {
             const bits = encodePad(Input.p1()) | netLock.pending;
@@ -421,6 +439,7 @@
             if (e === "data") {
               if (d.t === "rematch") netRematch.them = true;
               else if (d.t === "start") startNetVs(d.s);
+              else if (d.t === "ready") remoteReadyEpoch = Math.max(remoteReadyEpoch, d.e);
               else if (d.t === "bye") { handleNetDrop("あいてが たいせんを やめました"); break; }
             }
           }
@@ -516,6 +535,7 @@
     get netLock() { return netLock; },
     get sel() { return sel; },
     get netUI() { return netUI; },
+    get menuIndex() { return menuIndex; },
   };
 
   // ============ 60fps固定ループ ============

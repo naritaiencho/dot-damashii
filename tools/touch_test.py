@@ -19,6 +19,33 @@ def check(name, cond):
     print(("PASS" if cond else "FAIL"), "-", name)
 
 
+# 表示中の全ボタン（+テンキー本体）が #frame と重ならないかを返す（重なった要素idのリスト）
+OVERLAP_JS = """() => {
+    const f = document.getElementById('frame').getBoundingClientRect();
+    const bad = [];
+    document.querySelectorAll('#dtc-root .dtc-btn, #dtc-keypad').forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return;  // 非表示（display:none）は除外
+        const hit = !(r.right <= f.left || r.left >= f.right ||
+                      r.bottom <= f.top || r.top >= f.bottom);
+        if (hit) bad.push(el.id || el.className);
+    });
+    return bad;
+}"""
+
+
+def open_touch_page(browser, width, height):
+    pg = browser.new_page(viewport={"width": width, "height": height})
+    pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+    pg.goto(URL + "?touch=1")
+    pg.wait_for_load_state("networkidle")
+    pg.wait_for_timeout(600)
+    pg.add_script_tag(path=TOUCH_JS)
+    pg.wait_for_timeout(400)  # layout() 初回 + 100ms再計算待ち
+    return pg
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
 
@@ -124,7 +151,71 @@ with sync_playwright() as p:
     page.wait_for_timeout(150)
     check("⌫ で1文字削除できる", page.evaluate("window.GAME.netUI.joinInput") == "123")
     page.screenshot(path=str(SHOT / "touch_ui_netjoin.png"))
+    check("932x430 はオーバーレイモード", page.evaluate(
+        "document.getElementById('dtc-root').classList.contains('dtc-overlay')"))
+    check("タッチUI有効時は #help 非表示", page.evaluate(
+        "getComputedStyle(document.getElementById('help')).display === 'none'"))
     page.close()
+
+    # ============ ケース3: 縦持ち 412x915 → 下置きモード・フレーム非重複 ============
+    pg = open_touch_page(browser, 412, 915)
+    check("縦持ち: body に dtc-touch が付く", pg.evaluate(
+        "document.body.classList.contains('dtc-touch')"))
+    check("縦持ち: 下置きモード（dtc-bottom）", pg.evaluate(
+        "document.body.classList.contains('dtc-bottom')"))
+    bad = pg.evaluate(OVERLAP_JS)
+    check(f"縦持ち: 全ボタンが #frame と重ならない {bad}", bad == [])
+    pg.screenshot(path=str(SHOT / "touch_portrait.png"))
+    # netjoin まで進めてテンキーも #frame 外にあること
+    pg.keyboard.press("KeyS"); pg.wait_for_timeout(100)
+    pg.keyboard.press("KeyS"); pg.wait_for_timeout(100)
+    pg.keyboard.press("Enter"); pg.wait_for_timeout(400)
+    pg.keyboard.press("KeyS"); pg.wait_for_timeout(100)
+    pg.keyboard.press("Enter"); pg.wait_for_timeout(900)
+    pg.wait_for_timeout(500)
+    if pg.evaluate("window.GAME.state") == "netjoin":
+        bad = pg.evaluate(OVERLAP_JS)
+        check(f"縦持ち netjoin: テンキー含め #frame と重ならない {bad}", bad == [])
+        pg.screenshot(path=str(SHOT / "touch_portrait_netjoin.png"))
+    pg.close()
+
+    # ============ ケース4: ほぼ正方形 860x1000（フォルダブル見開き）→ 下置きモード ============
+    pg = open_touch_page(browser, 860, 1000)
+    check("正方形: 下置きモード（dtc-bottom）", pg.evaluate(
+        "document.body.classList.contains('dtc-bottom')"))
+    bad = pg.evaluate(OVERLAP_JS)
+    check(f"正方形: 全ボタンが #frame と重ならない {bad}", bad == [])
+    pg.screenshot(path=str(SHOT / "touch_square.png"))
+    pg.close()
+
+    # ============ ケース5: 横持ち 915x412 → オーバーレイモード ============
+    pg = open_touch_page(browser, 915, 412)
+    check("横持ち: オーバーレイモード（dtc-overlay）", pg.evaluate(
+        "document.getElementById('dtc-root').classList.contains('dtc-overlay')"))
+    check("横持ち: dtc-bottom は付かない", pg.evaluate(
+        "!document.body.classList.contains('dtc-bottom')"))
+    # 半透明になっていること
+    op = pg.evaluate(
+        "parseFloat(getComputedStyle(document.getElementById('dtc-btn-light')).opacity)")
+    check(f"横持ち: ボタンが半透明（opacity={op}）", op < 0.8)
+    pg.screenshot(path=str(SHOT / "touch_landscape.png"))
+    pg.close()
+
+    # ============ ケース6: リサイズでモードが動的に切り替わる（フォルダブル開閉） ============
+    pg = open_touch_page(browser, 412, 915)
+    check("リサイズ前: 下置きモード", pg.evaluate(
+        "document.body.classList.contains('dtc-bottom')"))
+    pg.set_viewport_size({"width": 915, "height": 412})
+    pg.wait_for_timeout(600)
+    check("横長へリサイズ → オーバーレイへ切替", pg.evaluate(
+        "document.getElementById('dtc-root').classList.contains('dtc-overlay')"))
+    pg.set_viewport_size({"width": 860, "height": 1000})
+    pg.wait_for_timeout(600)
+    check("正方形へリサイズ → 下置きへ切替", pg.evaluate(
+        "document.body.classList.contains('dtc-bottom')"))
+    bad = pg.evaluate(OVERLAP_JS)
+    check(f"リサイズ後も #frame と重ならない {bad}", bad == [])
+    pg.close()
 
     # ============ ケース2: ?touch=1 なし（非タッチ環境）→ DOM非生成 ============
     page2 = browser.new_page(viewport={"width": 932, "height": 430})

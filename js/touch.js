@@ -3,9 +3,22 @@
 // スマホ・タブレット用の仮想ゲームパッドを生成し、
 // Input.setVirtual() 経由でキーボードと同等の入力を注入する。
 // 有効化条件: タッチデバイス、または URL に ?touch=1
+//
+// レイアウトは「#frame 下端から画面下端までの実空間」で自動判定:
+//   - 下置きモード:   空きが十分 → ゲーム画面を上寄せし、フレーム外の
+//                     下空間にボタンを配置（キャンバスと一切重ならない）
+//   - オーバーレイモード: 空きが不足（横持ち等）→ 四隅端・小さめ・
+//                     半透明でキャンバスへの被りを最小化
+// フォルダブルの開閉等による画面サイズ変化にも resize /
+// orientationchange / 300msポーリングで追従する。
 // ============================================================
 (() => {
   "use strict";
+
+  // ---------- 二重読み込みガード ----------
+  // （index.html の <script> とテストの動的注入が重なってもUIを重複生成しない）
+  if (window.__DTC_TOUCH_LOADED__) return;
+  window.__DTC_TOUCH_LOADED__ = true;
 
   // ---------- 有効化判定 ----------
   const isTouchDevice = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
@@ -39,6 +52,13 @@
 }
 #dtc-root * { box-sizing: border-box; }
 
+/* タッチUI有効時: 下部の操作説明テキストを隠す */
+body.dtc-touch #help { display: none !important; }
+
+/* 下置きモード時: ゲーム画面を上に寄せて下に操作スペースを作る */
+body.dtc-touch.dtc-bottom { justify-content: flex-start; }
+body.dtc-touch.dtc-bottom #frame { margin-top: calc(0.8vh + env(safe-area-inset-top, 0px)); }
+
 /* ---- ボタン共通（レトロゲーム機風） ---- */
 .dtc-btn {
   pointer-events: auto;
@@ -47,7 +67,7 @@
   color: #f5e9d0;
   cursor: pointer;
   text-shadow: 0 1px 0 rgba(0,0,0,0.7);
-  transition: transform 0.05s ease-out, filter 0.05s ease-out;
+  transition: transform 0.05s ease-out, filter 0.05s ease-out, opacity 0.08s ease-out;
 }
 .dtc-btn.dtc-pressed { transform: scale(0.9) translateY(2px); filter: brightness(0.72); }
 
@@ -132,6 +152,33 @@
 #dtc-btn-heavy   { left: calc(var(--dtc-b) * 1.60);    bottom: calc(var(--dtc-b) * 1.50); }
 #dtc-btn-special { left: calc(var(--dtc-b) * 2.65);    bottom: calc(var(--dtc-b) * 1.18); }
 
+/* ---- 下置きモード: コンパクトなクラスター配置（横幅を節約して大きめボタン） ---- */
+#dtc-root.dtc-bottom #dtc-left  { left: clamp(10px, 3vw, 30px); }
+#dtc-root.dtc-bottom #dtc-right {
+  right: clamp(10px, 3vw, 30px);
+  width: calc(var(--dtc-b) * 3.15);
+  height: calc(var(--dtc-b) * 2.40);
+}
+#dtc-root.dtc-bottom #dtc-btn-guard   { left: 0;                          bottom: 0; }
+#dtc-root.dtc-bottom #dtc-btn-light   { left: calc(var(--dtc-b) * 0.12);  bottom: calc(var(--dtc-b) * 1.10); }
+#dtc-root.dtc-bottom #dtc-btn-heavy   { left: calc(var(--dtc-b) * 1.12);  bottom: calc(var(--dtc-b) * 1.36); }
+#dtc-root.dtc-bottom #dtc-btn-special { left: calc(var(--dtc-b) * 2.12);  bottom: calc(var(--dtc-b) * 1.10); }
+
+/* ---- オーバーレイモード: 四隅端ギリギリ・小さめ・半透明 ---- */
+#dtc-root.dtc-overlay { --dtc-b: clamp(46px, 11vmin, 76px); }
+#dtc-root.dtc-overlay .dtc-btn { opacity: 0.55; }
+#dtc-root.dtc-overlay .dtc-btn.dtc-pressed { opacity: 0.95; }
+#dtc-root.dtc-overlay #dtc-left {
+  left: clamp(4px, 1vw, 12px);
+  bottom: calc(0.8vh + env(safe-area-inset-bottom, 0px));
+}
+#dtc-root.dtc-overlay #dtc-right {
+  right: clamp(4px, 1vw, 12px);
+  bottom: calc(0.8vh + env(safe-area-inset-bottom, 0px));
+}
+#dtc-root.dtc-overlay .dtc-sys { top: calc(0.6vh + env(safe-area-inset-top, 0px)); opacity: 0.6; }
+#dtc-root.dtc-overlay .dtc-sys.dtc-pressed { opacity: 0.95; }
+
 /* ---- 部屋コード用テンキー ---- */
 #dtc-keypad {
   position: fixed;
@@ -167,8 +214,6 @@
   border-color: rgba(255,190,160,0.5);
   color: #ffe6da;
 }
-
-/* バトルクラスターはテンキー表示中（netjoin）も常時表示でOK（要件3） */
 `;
 
   // ---------- DOM生成 ----------
@@ -224,11 +269,15 @@
     style.textContent = CSS;
     document.head.appendChild(style);
 
+    document.body.classList.add("dtc-touch");
+
     const root = el("div", null, null, "dtc-root");
 
     // --- 上部端: START / もどる ---
-    root.appendChild(makeButton("START", "Enter", "dtc-sys", "dtc-start"));
-    root.appendChild(makeButton("もどる", "Escape", "dtc-sys", "dtc-back"));
+    const btnStart = makeButton("START", "Enter", "dtc-sys", "dtc-start");
+    const btnBack = makeButton("もどる", "Escape", "dtc-sys", "dtc-back");
+    root.appendChild(btnStart);
+    root.appendChild(btnBack);
 
     // --- 左下: 移動クラスター ---
     const left = el("div", null, null, "dtc-left");
@@ -266,11 +315,82 @@
     root.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
     root.addEventListener("contextmenu", (e) => e.preventDefault());
 
-    // --- ゲーム状態を300msポーリングしてテンキー表示を切替 ---
+    // ============================================================
+    // レイアウト計算: フレーム下の実空間で「下置き / オーバーレイ」を判定
+    // ============================================================
+    const frameEl = document.getElementById("frame");
+
+    // 下置きモードに最低限必要な空き高さ（sys行 + 最小ボタン2.5段 + 余白）
+    const MIN_ZONE = 200;
+
+    function layout() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const fh = frameEl ? frameEl.getBoundingClientRect().height : h * 0.6;
+
+      // 上寄せした場合に確保できる下空間（フレーム高は配置に依らず一定）
+      const topPad = Math.max(8, h * 0.01);
+      const potential = h - fh - topPad;
+      const bottomMode = potential >= MIN_ZONE;
+
+      document.body.classList.toggle("dtc-bottom", bottomMode);
+      root.classList.toggle("dtc-bottom", bottomMode);
+      root.classList.toggle("dtc-overlay", !bottomMode);
+
+      if (!bottomMode) {
+        // オーバーレイモード: CSSのデフォルト（四隅・小さめ・半透明）に任せる
+        root.style.removeProperty("--dtc-b");
+        root.style.removeProperty("--dtc-k");
+        btnStart.style.top = "";
+        btnBack.style.top = "";
+        keypad.style.bottom = "";
+        return;
+      }
+
+      // --- 下置きモード: クラス切替を反映した実測でフレーム外に配置 ---
+      const f = frameEl.getBoundingClientRect(); // ここでリフロー強制
+      const m = 8;
+      const sysH = btnStart.offsetHeight || 32;
+      const sysTop = Math.round(f.bottom + m);
+      btnStart.style.top = sysTop + "px";
+      btnBack.style.top = sysTop + "px";
+
+      const zoneH = h - f.bottom; // フレーム下端〜画面下端
+      // ボタン基準サイズ: 横幅制約（左2.42B + 右3.15B + 余白）と
+      // 縦制約（sys行の下に2.4B段のクラスター）の小さい方
+      const widthBound = (w - 44) / 5.8;
+      const heightBound = (zoneH - sysH - m * 3 - 24) / 2.5;
+      const B = Math.round(Math.min(110, Math.max(44, Math.min(widthBound, heightBound))));
+      root.style.setProperty("--dtc-b", B + "px");
+
+      // テンキー: バトルクラスターの上・フレームの下に収める
+      const padBottom = Math.round(B * 2.6 + 16);
+      keypad.style.bottom = "calc(" + padBottom + "px + env(safe-area-inset-bottom, 0px))";
+      const kAvail = zoneH - sysH - m * 2 - padBottom - 16;
+      const k = Math.round(Math.min(64, Math.max(34, Math.min(kAvail / 4.6, (w - 70) / 3.6))));
+      root.style.setProperty("--dtc-k", k + "px");
+    }
+
+    layout();
+    setTimeout(layout, 100); // フォント/レイアウト確定後にもう一度
+    window.addEventListener("resize", layout);
+    window.addEventListener("orientationchange", layout);
+
+    // --- 300msポーリング: テンキー表示切替 + 画面サイズ変化の検知 ---
+    // （フォルダブルの開閉などresizeを取りこぼすケースの保険）
+    let lastSig = "";
     setInterval(() => {
       const g = window.GAME;
       const show = !!(g && g.state === "netjoin");
       keypad.classList.toggle("dtc-show", show);
+
+      const fb = frameEl ? Math.round(frameEl.getBoundingClientRect().bottom) : 0;
+      const sig = window.innerWidth + "x" + window.innerHeight + "@" + fb;
+      if (sig !== lastSig) {
+        layout();
+        lastSig = window.innerWidth + "x" + window.innerHeight + "@" +
+          (frameEl ? Math.round(frameEl.getBoundingClientRect().bottom) : 0);
+      }
     }, 300);
   }
 
